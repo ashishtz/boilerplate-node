@@ -1,0 +1,80 @@
+{
+	"env" : {
+		"node" : true,
+		"es2021" : true
+	},
+	"extends" : ["eslint:recommended", "plugin:@typescript-eslint/recommended"],
+	"overrides" : [],
+	"parser" : "@typescript-eslint/parser",
+	"parserOptions" : {
+		"ecmaVersion" : "latest",
+		"sourceType" : "module"
+	},
+	"plugins" : ["@typescript-eslint"],
+	"rules" : {
+		"indent" : ["error", "tab"],
+		"linebreak-style" : ["error", "unix"],
+		"quotes" : ["error", "double"],
+		"semi" : ["error", "always"],
+		"no-console" : "error",
+		"object-curly-newline" : [
+			"error",
+			{
+				"ObjectExpression" : {
+					"multiline" : true,
+					"minProperties" : 2
+				},
+				"ObjectPattern" : {
+					"multiline" : true,
+					"minProperties" : 3
+				},
+				"ImportDeclaration" : "never",
+				"ExportDeclaration" : {
+					"multiline" : true,
+					"minProperties" : 3
+				}
+			}
+		],
+		"prefer-const" : [
+			"error",
+			{
+				"destructuring" : "any",
+				"ignoreReadBeforeAssign" : false
+			}
+		],
+		"camelcase" : [
+			"error",
+			{
+				"ignoreDestructuring" : true,
+				"properties" : "never",
+				"ignoreGlobals" : true
+			}
+		],
+		"arrow-spacing" : "error",
+		"space-infix-ops" : "error",
+		"space-before-blocks" : [
+			"error",
+			{
+				"functions" : "always",
+				"keywords" : "always",
+				"classes" : "always"
+			}
+		],
+		"key-spacing" : [
+			2,
+			{
+				"singleLine" : {
+					"beforeColon" : false,
+					"afterColon" : true
+				},
+				"multiLine" : {
+					"beforeColon" : true,
+					"afterColon" : true
+				}
+			}
+		],
+		"no-nested-ternary" : "error",
+		"@typescript-eslint/no-explicit-any" : "error",
+        "@typescript-eslint/no-non-null-assertion": "off"
+	}
+}
