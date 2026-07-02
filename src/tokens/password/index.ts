@@ -1,18 +1,17 @@
-import { auth } from "../../config";
 import bcrypt from "bcrypt";
+import { authConfig } from "../../config";
 
-export const encryptPassword = (password: string) => {
-	try {
-		return bcrypt.hashSync(password, auth.passwordsaltRound);
-	} catch (error) {
-		return null;
-	}
-};
+/**
+ * Hashes a plain text password with bcrypt. Async on purpose: the sync
+ * variants block the event loop for the full cost factor duration.
+ */
+export const hashPassword = (plain: string): Promise<string> => bcrypt.hash(plain, authConfig.bcryptSaltRounds);
 
-export const decryptPassword = (hashed: string, string: string) => {
+/** Compares a plain text password against a stored bcrypt hash. */
+export const verifyPassword = async (plain: string, hash: string): Promise<boolean> => {
 	try {
-		return bcrypt.compareSync(string, hashed);
-	} catch (error) {
+		return await bcrypt.compare(plain, hash);
+	} catch {
 		return false;
 	}
 };

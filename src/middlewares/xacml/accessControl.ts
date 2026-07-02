@@ -1,59 +1,55 @@
-import transform from "./lang";
-import { Construct } from "./types";
 import { NextFunction, Request, Response } from "express";
-import XacmlHelper from "./XacmlClass";
+import Xacml from "./Xacml";
+import type { AccessControlOptions } from "./types";
 
-export default ({
-	pre = [], validation, secondaryValidations 
-}: Omit<Construct, "preRequest">) =>
+/**
+ * Route middleware gluing the XACML phases together. Requests only reach
+ * the service once every phase passed, keeping services focused on
+ * business logic:
+ *
+ *   router.post(
+ *     "/register",
+ *     accessControl({ validation, pre, secondaryValidations }),
+ *     registerService,
+ *   );
+ */
+export default ({ pre = [], validation, secondaryValidations = [] }: AccessControlOptions = {}) =>
 	async (req: Request, res: Response, next: NextFunction) => {
 		try {
-			const {
-				body, params, query, user, headers 
-			} = req;
-			const xacml = new XacmlHelper({
+			const xacml = new Xacml({
 				pre,
 				validation,
 				secondaryValidations,
-				preRequest : {
-					body,
-					params,
-					query,
-					user,
-					headers,
-					pre : {},
+				preRequest: {
+					body: req.body,
+					params: req.params,
+					query: req.query,
+					user: req.user,
+					headers: req.headers,
+					pre: {},
 				},
 			});
-			// There is a minor posibility where we do not need of validation
-			// like when we are fetching list of records, where no pagination
-			// involved or anything else we need from body, params or query
-			// We can pass null or nothing for the validation part and it will
-			// skip the entire validation section.
+
+			// Validation is optional: list endpoints without input can skip it.
 			if (validation) {
-				xacml.validateRequest(req);
+				xacml.validateRequest();
 				if (xacml.validationErrors.length) {
 					return res.withValidation(xacml.validationErrors);
 				}
 			}
 
-			// This will make sure the pre methods assigned
-			// and also that they are validated against our
-			// secondaryValidations.
-			if ((pre || []).length) {
-				const xacmlRequest = await (await xacml.fetchPre()).validatePre();
-				if (!xacmlRequest.preValidations.valid) {
-					throw {
-						status : 400,
-						message : transform(xacml.preValidations.stack || "", "en"),
-						stack : xacmlRequest.preValidations.stack,
-					};
+			if (pre.length || secondaryValidations.length) {
+				await xacml.fetchPre();
+				const result = await xacml.validatePre();
+				if (!result.valid) {
+					// The failing check's name doubles as the i18n message code.
+					return res.withError(result.failedCheck ?? "BAD_REQUEST", 400);
 				}
-
-				req.pre = xacmlRequest.preRequest.pre;
+				req.pre = xacml.preRequest.pre;
 			}
 
 			return next();
 		} catch (error) {
-			return res.withError("IDENTIFIER_REQUIRED", 400, error);
+			return next(error);
 		}
 	};

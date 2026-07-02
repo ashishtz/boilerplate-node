@@ -1,33 +1,27 @@
-import Joi, { ValidationError, ValidationResult } from "joi";
-
-// to make the file a module and avoid the TypeScript error
-export {};
-
-type JoiValidationData = { [key: string]: unknown };
-
-type ErrorMessage = {
-	status: number;
-	message: string;
-	stack: string;
-	statusCode: number;
-};
+import type { ValidationErrorItem, ValidationResult } from "joi";
+import type { AuthUser } from "../../models/User";
+import type { SchemaMap } from "../../utils/validate";
 
 declare global {
 	namespace Express {
-		export interface Request {
-			user?: {
-				id: number;
-				role: "admin" | "hr" | "user";
-				email: string;
-				status: "active" | "inactive" | "unverified";
-			};
-			validate: (data: JoiValidationData | JoiValidationData[], validationObject: Joi) => ValidationResult;
-			pre?: Record<unknown>;
+		interface Request {
+			/** Authenticated user, populated by the authenticate middleware when a valid bearer token is present. */
+			user?: AuthUser;
+			/** Data fetched by XACML pre steps, keyed by each step's `assign` name. */
+			pre?: Record<string, unknown>;
+			/** Validates a payload against a map of Joi validators, collecting all errors. */
+			validate: (data: unknown, schemaMap: SchemaMap) => ValidationResult;
 		}
-		export interface Response {
-			withData: (data: unknown, message: string, statusCode: number) => void;
-			withError: (message: ErrorMessage | string | unknown, statusCode: number, data?: unknown) => void;
-			withValidation: (data: ValidationError["details"]) => void;
+
+		interface Response {
+			/** Sends the standard success envelope: `{ data, message, status }`. */
+			withData: (data?: unknown, message?: string, status?: number) => Response;
+			/** Sends the standard error envelope. Accepts a message code, an ApiError or any thrown value. */
+			withError: (error: unknown, status?: number) => Response;
+			/** Sends a 422 envelope listing every failed validation, keyed by field. */
+			withValidation: (details: ValidationErrorItem[]) => Response;
 		}
 	}
 }
+
+export {};

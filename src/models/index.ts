@@ -1,5 +1,3 @@
+export { default as BaseModel } from "./BaseModel";
 export { default as User } from "./User";
-
-// Base level export
-export { default as Modal } from "./Model";
-export { knex } from "./Model";
+export type { AuthUser } from "./User";

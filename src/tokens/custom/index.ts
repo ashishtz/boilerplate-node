@@ -1,15 +1,19 @@
-import { auth } from "../../config";
-import jwt from "jsonwebtoken";
+import jwt, { JwtPayload, SignOptions } from "jsonwebtoken";
+import { authConfig } from "../../config";
 
-export const generateToken = (details: object, expiresIn = "2d") => {
-	return jwt.sign(details, auth.mailTokenSecret, { expiresIn });
-};
+/**
+ * Short lived, HMAC signed tokens for single purpose links such as email
+ * verification or password reset. These are intentionally separate from
+ * the RS256 authentication tokens issued at login.
+ */
+export const generateToken = (payload: object, expiresIn = "2d"): string =>
+	jwt.sign(payload, authConfig.mailTokenSecret, { expiresIn: expiresIn as SignOptions["expiresIn"] });
 
-export const decodeToken = (token: string) => {
+/** Returns the decoded payload, or null for an invalid or expired token. */
+export const decodeToken = <T extends object = JwtPayload>(token: string): (T & JwtPayload) | null => {
 	try {
-		const decode = jwt.verify(token, auth.mailTokenSecret);
-		return decode;
-	} catch (_err) {
+		return jwt.verify(token, authConfig.mailTokenSecret) as T & JwtPayload;
+	} catch {
 		return null;
 	}
 };

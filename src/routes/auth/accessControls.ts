@@ -1,74 +1,22 @@
-import { User } from "../../models";
-import { validateJwt } from "../../providers/jwt";
-import { constant } from "../../config";
-import { Pre, SecondaryValidation } from "../../middlewares/xacml";
+import User from "../../models/User";
+import type { AccessControlOptions } from "../../middlewares/xacml";
 
-interface Data {
-	userId: string;
-}
-
-const pre: {
-	[key: string]: Pre[];
-} = {
-	addUser : [
+/**
+ * XACML rules for the register endpoint: fetch any user holding the
+ * requested email, then reject the request when one exists. The failing
+ * check's name is the i18n code returned to the client.
+ */
+export const registerAccessControl: Pick<AccessControlOptions, "pre" | "secondaryValidations"> = {
+	pre: [
 		{
-			assign : "userByEmail",
-			method : (req) => {
-				return User.query().where("email", req.body.email).first();
-			},
+			assign: "userByEmail",
+			method: (req) => User.query().findOne("email", String(req.body?.email ?? "")),
 		},
 	],
-	accountVerfication : [
+	secondaryValidations: [
 		{
-			assign : "userToken",
-			method : (req) => {
-				const { params } = req;
-				const token = validateJwt(params?.token);
-				return token || null;
-			},
-		},
-		{
-			assign : "user",
-			method : async (req) => {
-				const { params } = req;
-				let user = <User | undefined>{};
-				const data = <Data>validateJwt(params?.token);
-				if (!data || !data.userId) return user;
-				user = await User.query().findOne("id", data.userId).where("status", constant.userStatusActive);
-				return user || null;
-			},
+			assign: "EMAIL_ALREADY_EXISTS",
+			method: (req) => !req.pre.userByEmail,
 		},
 	],
-};
-
-const secondaryValidation: {
-	[key: string]: SecondaryValidation[];
-} = {
-	addUser : [
-		{
-			assign : "checkUserExist",
-			method : (req) => {
-				return !(req?.pre?.userByEmail || []).length;
-			},
-		},
-	],
-	accountVerfication : [
-		{
-			assign : "checkTokenExpiry",
-			method : ({ pre: { userToken } }) => {
-				return !!userToken;
-			},
-		},
-		{
-			assign : "checkUserAlreadyActive",
-			method : ({ pre: { user } }) => {
-				return !!user;
-			},
-		},
-	],
-};
-
-export default {
-	pre,
-	secondaryValidation,
 };

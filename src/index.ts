@@ -1,43 +1,56 @@
-import express, { Express, Request, Response } from "express";
-import dotenv from "dotenv";
-import cors, { CorsOptions } from "cors";
-import { app as appSettings } from "./config";
-import log from "./providers/log";
-import responseExtended from "./middlewares/response";
-import userDetail from "./middlewares/userDetail";
-import api from "./routes";
+import { createApp } from "./app";
+import { appConfig } from "./config";
+import { closeDatabase } from "./database";
+import { logger } from "./providers/logger";
 
-dotenv.config();
+const app = createApp();
 
-const corsOptions: CorsOptions = {
-	origin : (origin, callback) => {
-		if (!(appSettings.allowedHosts || []).length || (appSettings.allowedHosts || []).includes(origin!) || !origin) {
-			callback(null, origin);
-		} else {
-			callback(new Error("Not allowed by CORS"));
-		}
-	},
-	credentials : true,
-};
-
-const app: Express = express();
-
-app.disable("x-powered-by");
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
-app.use(cors(corsOptions));
-
-// Custom Middlewares
-app.use(responseExtended);
-app.use(userDetail);
-
-const port = process.env.PORT || 4200;
-app.use("/api", api);
-
-app.get("/", (req: Request, res: Response) => {
-	res.send("Express + TypeScript Server");
+const server = app.listen(appConfig.port, () => {
+	logger.info(`Server listening on port ${appConfig.port} (${appConfig.env})`);
 });
 
-app.listen(port, () => {
-	log.info(`⚡️ Server is running at port:${port}`);
+let shuttingDown = false;
+
+/**
+ * Graceful shutdown: stop accepting connections, let in-flight requests
+ * finish, close the database pool, then exit. A hard deadline guarantees
+ * the process never hangs forever on a stuck connection.
+ */
+const shutdown = (signal: NodeJS.Signals): void => {
+	if (shuttingDown) {
+		return;
+	}
+	shuttingDown = true;
+	logger.info(`${signal} received, shutting down gracefully`);
+
+	const deadline = setTimeout(() => {
+		logger.error("Shutdown deadline exceeded, exiting forcefully");
+		process.exit(1);
+	}, 10_000);
+	deadline.unref();
+
+	server.close((closeError) => {
+		void (async () => {
+			try {
+				await closeDatabase();
+			} catch (error) {
+				logger.error({ err: error }, "Failed to close the database pool");
+			}
+			logger.info("Shutdown complete");
+			process.exit(closeError ? 1 : 0);
+		})();
+	});
+};
+
+process.on("SIGTERM", shutdown);
+process.on("SIGINT", shutdown);
+
+process.on("unhandledRejection", (reason) => {
+	logger.fatal({ err: reason }, "Unhandled promise rejection");
+	process.exit(1);
+});
+
+process.on("uncaughtException", (error) => {
+	logger.fatal({ err: error }, "Uncaught exception");
+	process.exit(1);
 });
