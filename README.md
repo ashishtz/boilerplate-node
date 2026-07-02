@@ -1,194 +1,215 @@
 # Boilerplate Node
 
-This boilerplate has been developed using the Express.js framework with TypeScript. The project utilizes MySQL as the chosen database system, seamlessly integrated with the Object-Relational Mapping (ORM) capabilities provided by Objection.js.
+A production-grade Express.js + TypeScript boilerplate using MySQL through [Knex](https://knexjs.org/) and the [Objection.js](https://vincit.github.io/objection.js/) ORM.
 
+## Features
 
-## Project Boilerplate for Independent Projects
+- **Express 5 + TypeScript (strict)** — async errors are forwarded to the central error handler automatically; services just `throw`.
+- **Validated, typed configuration** — every environment variable is validated with Joi at boot; production fails fast when secrets are missing.
+- **Security by default** — [helmet](https://helmetjs.github.io/) headers, CORS allow-list, global + auth-specific rate limits, RS256 JWTs with algorithm pinning, bcrypt password hashing, no stack traces or internals in production responses.
+- **Structured logging** — [pino](https://getpino.io/) JSON logs in production, pretty logs in development, optional per-query SQL logging with durations.
+- **Consistent response envelope** — `res.withData` / `res.withError` / `res.withValidation` on every response, with i18n-ready message codes.
+- **XACML access control** — declarative request validation, data pre-fetching and authorization checks that keep services free of boilerplate (see below).
+- **Operations ready** — liveness/readiness endpoints, graceful shutdown, multi-stage non-root Dockerfile, GitHub Actions CI, Dependabot.
+- **Tested** — unit and in-process integration tests with Vitest + Supertest.
 
-This repository serves as a versatile boilerplate for our independent projects. It offers a solid starting point for project references while allowing us to maintain a clear separation from existing repositories.
+## Requirements
 
-To utilize this boilerplate, follow these steps:
-
-1. **Clone the Repository**
-   
-   Begin by cloning this repository using the following command:
-   
-   ```bash
-   git clone git@github.com:ashishtz/boilerplate-node.git PROJECT_REPO_NAME
-   ```
-   
-   Replace `PROJECT_REPO_NAME` with your desired repository name. This will create a local copy of the boilerplate for your project.
-
-   *Note*: The `PROJECT_REPO_NAME` parameter enables you to have a meaningful folder name for your project, rather than using "boilerplate-node" every time.
-
-2. **Initialize and Configure Git**
-
-   Once the repository is cloned successfully, navigate to the cloned folder and perform the following steps:
-   
-   ```bash
-   cd PROJECT_REPO_NAME
-   rm -rf .git
-   git init
-   git add .
-   git commit -m 'Initial boilerplate'
-   git remote add origin PROJECT_REPO_URL
-   git push -u origin master
-   ```
-
-   These commands achieve the following:
-
-   - `git init`: Initializes an empty Git workspace within your project folder.
-   - `git remote add origin PROJECT_REPO_URL`: Associates your local project repository with the remote project repository. Replace `PROJECT_REPO_URL` with the URL of your project repository.
-
-After completing these steps, your project will be equipped with the boilerplate foundation, allowing you to begin your work with confidence.
-
-Feel free to customize and build upon this boilerplate according to the specific requirements of your project. Happy coding!
-
-
-
-Below is a breakdown of each module integrated into this boilerplate:
-
-## Config
-The `config` module serves as a repository for storing variables that are prone to change in the future or are commonly used throughout the application. Additionally, any frequently used logical functions (excluding database queries) should be defined here. For specific module-related variables, you can create separate files and include them in the `index.ts` file within the same folder.
-
-## Middlewares
-In the `middlewares` module, you'll find all the middleware components for your application. Any required middleware can be placed within this folder and easily imported wherever needed.
-
-## Models
-The `models` module is dedicated to defining the model structures for each table. Each table corresponds to a specific model defined within this folder. Don't forget to include the model in the `index.ts` file of this directory.
-
-## Providers
-The `providers` module houses common service providers that are utilized across the application.
-
-## Routes
-All application routes are organized within the `routes` module.
-
-## Services
-The `services` module contains the implementation of various services required by the application.
-
-## Tokens
-The `tokens` module contains configurations related to different types of tokens. Note that modifications to this directory should only be made when necessary. Two token types, `custom` and `password`, are defined here. `Custom` tokens generate tokens for tasks like sending reset password or account activation links, while `password` tokens are used for password encryption and comparison.
-
-## Types
-Global type declarations are stored in the `types` module. These type declarations apply throughout the entire project.
-
-
-#### Several advanced methods are implemented within this boilerplate, which may appear intricate. Let's delve into them:
-
-## XACML
-XACML is a specialized tool employed to verify if requests contain the appropriate information from a database. While we already possess mechanisms to check request attributes like message content or URLs, these checks often fall short when it comes to required database-related information. To address this, I introduce XACML policies as checkpoints that evaluate incoming requests before reaching the service layer. This ensures that the service remains streamlined and focused on its core responsibilities, unburdened by extensive validation checks.
-
-XACML serves two primary purposes:
-
-1. Request Validation: Validates incoming request data (params, body, query) from the client.
-2. Data Verification: Validates the authenticity and validity of data received from the client.
-
-XACML functions as middleware, accepting three parameters. Let's use the example of a registration request to illustrate its usage:
-
-### 1. Validation
-In the `validation` step, validation schemas are defined for different request sources (`body`, `params`, or `query`). These schemas are automatically validated by XACML.
-
-Example for body validation:
-
-```javascript
-const registrationSchema = {
-  body: {
-    email: Joi.string().required(),
-    username: Joi.string().required(),
-    password: Joi.string().required(),
-  },
-};
-```
-
-### 2. Pre
-The `pre` step involves fetching data from the database necessary for request validation. For instance, in the registration example, the goal might be to check if an email address already exists in the system.
-
-```javascript
-const registrationPre = [
-  {
-    assign: 'user',
-    method: (req) => {
-      return User.query().whereNotDeleted().where('email', req.body.email);
-    },
-  },
-];
-```
-
-Additional pre steps can be added for fetching multiple data sets.
-
-### 3. Secondary Validation
-In `secondaryValidation`, the data fetched in the previous `pre` step is utilized for in-depth validation. Here, you have access to all request data (body, params, query, user) and the pre-fetched data.
-
-Example:
-
-```javascript
-const registrationValidation = [
-  {
-    assign: 'checkUserExist',
-    method: (req) => {
-      return !req.pre.userByEmail;
-    },
-  },
-  {
-    assign: 'checkFromSameOrganization',
-    method: (req) => {
-      return req.pre.userByEmail.org_id === req.organization.id;
-    },
-  },
-];
-```
-
-All these components are seamlessly integrated into the `accessControl` middleware:
-
-```javascript
-const { accessControl } = require('@crm/xacml');
-
-router.post('/registration', accessControl({
-  validation: registrationSchema,
-  pre: registrationPre,
-  secondaryValidation: registrationValidation,
-}), registerUserService);
-```
-
-This middleware ensures that data is validated using Joi, and subsequent checks are performed based on the fetched data. If all checks pass, the request proceeds to the service; otherwise, a `400` Bad Request response is sent, preventing the service from being executed. This approach promotes reusable service functions with streamlined checks.
+- Node.js 20+ (see `.nvmrc`)
+- MySQL 8+
 
 ## Setup
-Ensure your Node version is 16+. Start by creating a `.env` file; you can copy `.env.example` and modify it accordingly:
 
 ```shell
-cp .env.example .env
-```
-
-Install project dependencies:
-
-```shell
+cp .env.example .env        # then adjust the values
 npm install
+npm run generate:keys       # RSA key pair used to sign auth tokens
+npm run migrate             # create the database schema
+npm run dev                 # start with hot reload
 ```
 
-Generate JWT secure keys within the `keys` folder:
-
-```shell
-npm run generate:keys
-```
-
-Note the significance of this step, as it's essential for JWT token generation during user authentication. Following successful execution, two new key files will appear in the `keys` folder.
-
-With the setup complete, you can initiate the application in development mode:
-
-```shell
-npm run dev
-```
-
-For production deployment, generate a build:
+For production:
 
 ```shell
 npm run build
+npm start
 ```
 
-Subsequently, start the application in production mode:
+Or with Docker:
 
 ```shell
-npm run prod
+docker build -t my-api .
+docker run --env-file .env -p 4200:4200 my-api
 ```
 
-By adhering to these steps, you can effectively utilize the Boilerplate Node for your projects.
+> Keys live in `keys/` (git-ignored). Regenerating them (`--force`) invalidates every token already issued.
+
+## Scripts
+
+| Script                         | Purpose                                            |
+| ------------------------------ | -------------------------------------------------- |
+| `npm run dev`                  | Start with hot reload (tsx watch)                  |
+| `npm run build`                | Compile TypeScript to `dist/`                      |
+| `npm start`                    | Run the compiled app                               |
+| `npm test` / `test:watch`      | Run the Vitest suite                               |
+| `npm run lint` / `lint:fix`    | ESLint (flat config)                               |
+| `npm run format`               | Prettier over the whole repo                       |
+| `npm run typecheck`            | `tsc --noEmit`                                     |
+| `npm run generate:keys`        | Generate the RSA key pair (`--force` to overwrite) |
+| `npm run new-migration`        | Scaffold a migration from `templates/migration.js` |
+| `npm run migrate` / `rollback` | Apply / revert migrations                          |
+
+## Project structure
+
+```
+src/
+├── app.ts               # Express app factory (testable, no port binding)
+├── index.ts             # Bootstrap: listen + graceful shutdown
+├── config/              # Joi-validated env → typed appConfig/dbConfig/authConfig
+├── constants/           # Single source of truth for roles & user statuses
+├── database/            # Knex instance, Objection binding, query logging
+├── errors/              # ApiError (HTTP status + i18n code)
+├── i18n/                # Message catalog + transform()
+├── middlewares/
+│   ├── authenticate.ts  # Attaches req.user from a Bearer token
+│   ├── authorize.ts     # Role guard: authorize("admin")
+│   ├── errorHandler.ts  # Central error handler + 404 handler
+│   ├── response.ts      # withData / withError / withValidation helpers
+│   └── xacml/           # Declarative access control (see below)
+├── models/              # BaseModel + User (password never serialized)
+├── providers/           # logger (pino), jwt (RS256 sign/verify)
+├── routes/              # Routers + per-route validations/access controls
+├── services/            # Business logic; throw ApiError, respond via envelope
+├── tokens/              # bcrypt password hashing, single-purpose HMAC tokens
+├── types/               # Express type augmentation
+└── utils/               # Shared helpers (Joi validate)
+tests/                   # Vitest unit + Supertest integration tests
+scripts/                 # generate-keys.ts
+migrations/              # Knex migrations (see templates/migration.js)
+```
+
+## Response envelope
+
+Every endpoint answers with the same shape:
+
+```jsonc
+// success
+{ "data": { ... }, "message": "Success.", "status": 200 }
+
+// error
+{ "message": "Invalid credentials provided. Please try again.", "status": 401 }
+
+// validation error (422) - one entry per failed field
+{ "data": [{ "email": "\"email\" must be a valid email" }], "message": "The request contains invalid data.", "status": 422 }
+```
+
+Messages are i18n codes translated by `src/i18n`. Unknown codes fall back to English, then to the code itself. In production, unexpected 5xx details are replaced with a generic message and stacks are never sent.
+
+## Authentication & authorization
+
+- `POST /api/auth/register` — creates a user (role is always `user`; self-registration never grants privileges).
+- `POST /api/auth/login` — verifies credentials and returns an RS256 bearer token (`rememberMe: true` extends its lifetime). Unknown email and wrong password return the same `401` so accounts cannot be enumerated.
+- The `authenticate` middleware populates `req.user` on every request carrying a valid `Authorization: Bearer <token>` header; it never rejects by itself.
+- Protect routes with the role guard:
+
+```ts
+router.get("/admin", authorize("admin"), adminService);
+router.get("/shared", authorize(["admin", "user"]), sharedService);
+```
+
+Roles and user statuses are defined once in `src/constants` and reused by the model, the middleware, the Express types and the migration.
+
+## XACML
+
+XACML middleware evaluates requests **before** they reach the service layer, so services stay focused on business logic. It runs three phases:
+
+### 1. Validation
+
+Joi validator maps for `body`, `params` and `query`:
+
+```ts
+export const registerValidation: ValidationSchemas = {
+	body: {
+		email: Joi.string().email().required(),
+		password: Joi.string().min(8).required(),
+	},
+};
+```
+
+Failures answer `422` with one entry per failed field.
+
+### 2. Pre (data fetching)
+
+Pre steps fetch whatever the checks need. Results land on `req.pre[assign]`. Top-level steps run **sequentially**, so later steps can read earlier results; wrap independent steps in a nested array to run that group in **parallel**:
+
+```ts
+pre: [
+	{ assign: "userByEmail", method: (req) => User.query().findOne("email", String(req.body?.email ?? "")) },
+	[
+		{ assign: "plan", method: fetchPlan }, // these two run
+		{ assign: "quota", method: fetchQuota }, // in parallel
+	],
+];
+```
+
+### 3. Secondary validation
+
+Boolean checks (sync or async) over the fetched data. The first failing check stops the chain and answers `400`. Name each check with an i18n message code — it becomes the response message:
+
+```ts
+secondaryValidations: [{ assign: "EMAIL_ALREADY_EXISTS", method: (req) => !req.pre.userByEmail }];
+```
+
+Wire everything up on the route:
+
+```ts
+router.post("/register", accessControl({ validation, pre, secondaryValidations }), registerService);
+```
+
+## Configuration
+
+All variables are documented in `.env.example` and validated at boot in `src/config/env.ts`. Highlights:
+
+| Variable                                       | Default          | Notes                                                                     |
+| ---------------------------------------------- | ---------------- | ------------------------------------------------------------------------- |
+| `NODE_ENV`                                     | `development`    | `production` requires DB credentials + secrets explicitly                 |
+| `PORT`                                         | `4200`           |                                                                           |
+| `ALLOWED_ORIGINS`                              | _(empty)_        | CSV CORS allow-list. Empty = allow all in dev, block cross-origin in prod |
+| `TRUST_PROXY`                                  | `false`          | Set `true` behind a reverse proxy (correct client IPs for rate limiting)  |
+| `LOG_LEVEL`                                    | `info`           | pino level; `silent` disables logging                                     |
+| `ENABLE_QUERY_LOG`                             | `false`          | SQL + duration at debug level                                             |
+| `DATABASE_*`                                   | local defaults   | host, port, username, password, name, pool min/max                        |
+| `AUTH_TOKEN_EXPIRY` / `REMEMBER_TOKEN_EXPIRY`  | `7d` / `30d`     |                                                                           |
+| `JWT_PASSPHRASE`                               | dev-only default | Protects the RSA private key                                              |
+| `JWT_PRIVATE_KEY_PATH` / `JWT_PUBLIC_KEY_PATH` | `keys/*.pem`     |                                                                           |
+| `MAIL_TOKEN_SECRET`                            | dev-only default | Single-purpose tokens (verification/reset links)                          |
+| `BCRYPT_SALT_ROUNDS`                           | `12`             |                                                                           |
+| `RATE_LIMIT_*`                                 | 100 req / 15 min | Plus a stricter `AUTH_RATE_LIMIT_MAX` (10) on `/api/auth`                 |
+
+## Health endpoints
+
+- `GET /health` — liveness (process is up; never touches dependencies).
+- `GET /health/ready` — readiness (pings the database; `503` when unreachable).
+
+## Testing
+
+```shell
+npm test
+```
+
+Unit tests cover the pure modules (i18n, errors, XACML, JWT, password hashing); integration tests drive the real app in-process with Supertest. The JWT tests run against a throwaway key pair generated in `tests/.tmp/` by the Vitest global setup — no real keys or database required.
+
+## Using this boilerplate for a new project
+
+```bash
+git clone git@github.com:ashishtz/boilerplate-node.git PROJECT_REPO_NAME
+cd PROJECT_REPO_NAME
+rm -rf .git
+git init
+git add .
+git commit -m 'Initial boilerplate'
+git remote add origin PROJECT_REPO_URL
+git push -u origin main
+```
+
+Then rename the package in `package.json` and start building.

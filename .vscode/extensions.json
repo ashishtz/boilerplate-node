@@ -1,5 +1,8 @@
 {
 	"recommendations": [
-		"dbaeumer.vscode-eslint", "rvest.vs-code-prettier-eslint", "esbenp.prettier-vscode", "eamodio.gitlens"
+		"dbaeumer.vscode-eslint",
+		"esbenp.prettier-vscode",
+		"EditorConfig.EditorConfig",
+		"eamodio.gitlens"
 	]
 }

@@ -1,49 +1,62 @@
-import { IncomingHttpHeaders } from "http2";
-import { ParsedQs } from "qs";
-import Objection from "objection";
-import { Request } from "express";
-export type PreWithData = {
-	pre: {
-		[key: string]: unknown;
-	};
-	params?: { [key: string]: string };
-	body?: { [key: string]: string };
+import type { IncomingHttpHeaders } from "node:http";
+import type { ParsedQs } from "qs";
+import type { AuthUser } from "../../models/User";
+import type { SchemaMap } from "../../utils/validate";
+
+/**
+ * The request snapshot handed to pre steps and secondary validations.
+ * `pre` accumulates the results of earlier pre steps as they complete.
+ */
+export interface PreRequest {
+	body?: Record<string, unknown>;
+	params?: Record<string, string | string[] | undefined>;
 	query?: ParsedQs;
-	user?: {
-		id: number;
-		role: "admin" | "hr" | "interviewer";
-		email: string;
-		status: "active" | "inactive" | "unverified";
-	};
+	user?: AuthUser;
 	headers?: IncomingHttpHeaders;
-};
+	pre: Record<string, unknown>;
+}
 
-export type Pre = {
+/** A single data-fetching step. Its result is stored on `req.pre[assign]`. */
+export interface PreStep {
 	assign: string;
-	method: (methods: Partial<Request>) => Objection.QueryBuilder<Objection.Model> | unknown;
-};
+	method: (req: PreRequest) => unknown | Promise<unknown>;
+}
 
-export type SecondaryValidation = {
+/**
+ * Pre steps run sequentially at the top level, so later steps can read
+ * the results of earlier ones. Wrap independent steps in a nested array
+ * to run that group in parallel (hapi-style).
+ */
+export type PreDefinition = PreStep | PreDefinition[];
+
+/**
+ * A boolean check running after all pre steps completed. Name the check
+ * (`assign`) with an i18n message code - it becomes the response message
+ * when the check fails.
+ */
+export interface SecondaryValidation {
 	assign: string;
-	method: (methods: Partial<Request>) => boolean;
-};
+	method: (req: PreRequest) => boolean | Promise<boolean>;
+}
 
-export type JoiValidationData = { [key: string]: unknown };
+/** Joi validator maps per request source. */
+export interface ValidationSchemas {
+	body?: SchemaMap;
+	params?: SchemaMap;
+	query?: SchemaMap;
+}
 
-export type ValidationObj = {
-	body?: JoiValidationData | JoiValidationData[];
-	params?: JoiValidationData | JoiValidationData[];
-	query?: JoiValidationData | JoiValidationData[];
-};
+export interface PreValidationResult {
+	valid: boolean;
+	failedCheck?: string;
+}
 
-export type PreValidation = {
-	valid?: boolean;
-	stack?: string;
-};
-
-export interface Construct {
-	pre?: Pre[];
-	validation: ValidationObj;
+export interface AccessControlOptions {
+	validation?: ValidationSchemas;
+	pre?: PreDefinition[];
 	secondaryValidations?: SecondaryValidation[];
-	preRequest: Partial<Request>;
+}
+
+export interface XacmlOptions extends AccessControlOptions {
+	preRequest: PreRequest;
 }

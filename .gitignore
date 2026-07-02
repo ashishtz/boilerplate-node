@@ -1,4 +1,20 @@
-node_modules
-lib
-keys
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+lib/
+
+# Test artifacts
+coverage/
+tests/.tmp/
+
+# Secrets - never commit keys or environment files
+keys/
 .env
+.env.*
+!.env.example
+
+# Logs and OS noise
+*.log
+.DS_Store
